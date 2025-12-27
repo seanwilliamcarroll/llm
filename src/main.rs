@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::time::Instant;
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
 struct Token(usize);
@@ -20,16 +21,6 @@ impl std::fmt::Display for Token {
         }
         write!(f, "T<{}>", self.0)
     }
-}
-
-#[allow(dead_code)]
-struct Tokenizer {
-    current_token_id: usize,
-    tokens: Vec<Token>,
-    // encoder: Encoder,
-    // decoder: Decoder,
-    mapping: HashMap<(Token, Token), Token>,
-    reverse_mapping: HashMap<Token, (Token, Token)>,
 }
 
 struct BytePairEncoder {
@@ -111,10 +102,10 @@ impl BytePairEncoder {
         panic!("Didn't find next token!")
     }
 
-    fn encode(&self, input: String) -> Vec<Token> {
+    fn encode(&self, input: &str) -> Vec<Token> {
         let mut output = vec![];
 
-        let raw_bytes = input.into_bytes();
+        let raw_bytes = input.bytes().collect::<Vec<u8>>();
 
         let mut index: usize = 0;
 
@@ -135,11 +126,11 @@ impl BytePairEncoder {
         output
     }
 
-    fn decode(&self, tokens: Vec<Token>) -> String {
+    fn decode(&self, tokens: &Vec<Token>) -> String {
         String::from_utf8(
             tokens
-                .into_iter()
-                .map(|token| self.get_bytes(token))
+                .iter()
+                .map(|token| self.get_bytes(*token))
                 .flatten()
                 .collect::<Vec<u8>>(),
         )
@@ -148,41 +139,26 @@ impl BytePairEncoder {
 }
 
 #[allow(dead_code)]
+struct Tokenizer {
+    current_token_id: usize,
+    encoder: BytePairEncoder,
+}
+
+#[allow(dead_code)]
 impl Tokenizer {
     fn new() -> Self {
         Self {
             current_token_id: 256usize,
-            tokens: (0..256).map(|value| Token(value)).collect::<Vec<_>>(),
-            mapping: HashMap::new(),
-            reverse_mapping: HashMap::new(),
-            // encoder: Encoder::new(),
-            // decoder: Decoder::new(),
+            encoder: BytePairEncoder::new(),
         }
     }
 
-    fn expand_tokens(&self, token: Token) -> Vec<Token> {
-        let mut output = vec![];
-        if let Some((token_a, token_b)) = self.reverse_mapping.get(&token) {
-            output.extend(self.expand_tokens(*token_a).drain(0..));
-            output.extend(self.expand_tokens(*token_b).drain(0..));
-        } else {
-            output.push(token);
-        }
-        output
+    fn encode(&self, input: &str) -> Vec<Token> {
+        self.encoder.encode(input)
     }
 
-    fn tokens_to_string(&self, tokens: Vec<Token>) -> String {
-        let mut output: Vec<u8> = vec![];
-        for token in tokens {
-            // Recursively expand tokens
-
-            for token in self.expand_tokens(token) {
-                assert!(token.0 < 256usize);
-                let byte: u8 = token.0 as u8;
-                output.push(byte);
-            }
-        }
-        String::from_utf8(output).expect("Must work")
+    fn decode(&self, tokens: &Vec<Token>) -> String {
+        self.encoder.decode(tokens)
     }
 
     fn count_pairs(input: &[Token]) -> HashMap<(Token, Token), usize> {
@@ -199,22 +175,17 @@ impl Tokenizer {
         output
     }
 
-    fn train(&mut self, input: String) {
+    fn train(&mut self, input: &str, additional_merges: usize) {
         let mut tokens = input
             .bytes()
             .map(|byte| Token(byte as usize))
             .collect::<Vec<Token>>();
 
-        println!(
-            "First tokens: {:?}",
-            tokens.iter().take(10).collect::<Vec<_>>()
-        );
+        for added_vocab in 0..additional_merges {
+            if added_vocab == 2000 {
+                tokens = tokens.into_iter().take(200_000).collect::<Vec<Token>>();
+            }
 
-        let original_len = tokens.len() as f64;
-
-        println!("Before: {}", tokens.len());
-
-        for _ in 0..256 {
             let pairs = Self::count_pairs(&tokens);
 
             let top_pairs = {
@@ -224,11 +195,6 @@ impl Tokenizer {
             };
 
             let (top_pair, _) = top_pairs[0];
-
-            // println!("\n\nTop pairs:");
-            // for ((token_a, token_b), num) in top_pairs {
-            //     println!("{token_a}, {token_b} = {num} times");
-            // }
 
             let new_tokens = {
                 let mut new_tokens = Vec::with_capacity(tokens.len());
@@ -258,25 +224,11 @@ impl Tokenizer {
                 new_tokens.extend(current_tokens);
                 new_tokens
             };
-            self.mapping.insert(top_pair, Token(self.current_token_id));
-            self.reverse_mapping
-                .insert(Token(self.current_token_id), top_pair);
+            self.encoder
+                .add_encoding_rule(top_pair, Token(self.current_token_id));
             self.current_token_id += 1;
             tokens = new_tokens;
-            println!(
-                "After: {} ({:.2}x)",
-                tokens.len(),
-                original_len / (tokens.len() as f64)
-            );
         }
-
-        self.tokens = tokens.clone();
-        let original_corpus = self
-            .tokens_to_string(tokens)
-            .chars()
-            .take(400)
-            .collect::<String>();
-        println!("{original_corpus}");
     }
 }
 
@@ -289,11 +241,55 @@ fn main() -> std::io::Result<()> {
 
     println!("Read from file: {filepath}");
 
-    let mut tokenizer = Tokenizer::new();
-
     let text = std::fs::read_to_string(filepath)?;
 
-    tokenizer.train(text);
+    for additional_vocab in [0, 256, 768, 1280, 20278] {
+        println!();
+        println!(
+            "========================= Vocab size: {} =========================",
+            additional_vocab + 256
+        );
 
+        println!("Original text: {} bytes", text.len());
+
+        let mut tokenizer = Tokenizer::new();
+
+        let start_time = Instant::now();
+
+        tokenizer.train(&text, additional_vocab);
+
+        let training_time = start_time.elapsed();
+
+        println!("Training time: {:.2?}", training_time);
+
+        let start_time = Instant::now();
+
+        let encoded = tokenizer.encode(&text);
+
+        let encoding_time = start_time.elapsed();
+
+        println!(
+            "Encoded tokens {} ({:.2}x)",
+            encoded.len(),
+            (text.len() as f64) / (encoded.len() as f64),
+            // encoded.iter().take(10).collect::<Vec<_>>()
+        );
+        println!("Encoding time: {:.2?}", encoding_time);
+
+        let start_time = Instant::now();
+
+        let decoded = tokenizer.decode(&encoded);
+
+        let decoding_time = start_time.elapsed();
+
+        println!(
+            "Decoded text {} bytes",
+            decoded.len(),
+            // decoded.chars().take(400).collect::<String>()
+        );
+        assert_eq!(text.len(), decoded.len());
+
+        println!("Decoding time: {:.2?}", decoding_time);
+    }
     Ok(())
 }
