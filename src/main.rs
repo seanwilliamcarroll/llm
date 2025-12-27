@@ -160,25 +160,8 @@ impl BytePairEncoder {
             std::cmp::Reverse(bytes.len() * count)
         });
 
-        println!("Top 5 Tokens");
-        for (count, token) in frequency_counts.into_iter().take(5) {
-            println!("--------------------------------------------------");
-            let bytes = self.decoding_rules.get(&token).unwrap();
-            print!(
-                "{token} ({count} times with length {} = {} bytes)",
-                bytes.len(),
-                count * bytes.len()
-            );
-            if let Ok(string_token) = String::from_utf8(bytes.clone()) {
-                println!("\n\"{string_token}\"");
-            } else {
-                println!();
-            }
-        }
-        println!();
-
-        println!("Top 5 Tokens (Impact)");
-        for (count, token) in most_impact_frequency.into_iter().take(5) {
+        println!("Top 10 Tokens (Impact)");
+        for (count, token) in most_impact_frequency.into_iter().take(10) {
             println!("--------------------------------------------------");
             let bytes = self.decoding_rules.get(&token).unwrap();
             print!(
