@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Instant;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
 struct Token(usize);
 
 impl Token {
@@ -22,6 +22,8 @@ impl std::fmt::Display for Token {
         write!(f, "T<{}>", self.0)
     }
 }
+
+// impl Ord for Token {}
 
 struct BytePairEncoder {
     encoding_rules: Vec<HashMap<Vec<u8>, Token>>,
@@ -134,6 +136,36 @@ impl BytePairEncoder {
         )
         .expect("Shouldn't fail")
     }
+
+    fn frequency_count(&self, tokens: &[Token]) -> Vec<(usize, Token)> {
+        let mut counts: HashMap<Token, usize> = HashMap::new();
+
+        for token in tokens {
+            *counts.entry(*token).or_insert(0) += 1;
+        }
+
+        let mut output = counts.into_iter().map(|(k, v)| (v, k)).collect::<Vec<_>>();
+
+        output.sort();
+        output.reverse();
+        output
+    }
+
+    fn print_vocab(&self, tokens: &[Token]) {
+        let frequency_counts = self.frequency_count(tokens);
+
+        for (count, token) in frequency_counts.into_iter().take(5) {
+            println!("Top 5 Tokens");
+            print!("{token} ({count} times)");
+            let bytes = self.decoding_rules.get(&token).unwrap();
+            if let Ok(string_token) = String::from_utf8(bytes.clone()) {
+                println!(" \"{string_token}\"");
+            } else {
+                println!();
+            }
+        }
+        println!();
+    }
 }
 
 #[allow(dead_code)]
@@ -171,6 +203,10 @@ impl Tokenizer {
         }
 
         output
+    }
+
+    fn print_vocab(&self, tokens: &[Token]) {
+        self.encoder.print_vocab(tokens);
     }
 
     fn train(&mut self, input: &str, additional_merges: usize) {
@@ -283,6 +319,8 @@ fn main() -> std::io::Result<()> {
         assert_eq!(text.len(), decoded.len());
 
         println!("Decoding time: {decoding_time:.2?}");
+
+        tokenizer.print_vocab(&encoded);
     }
     Ok(())
 }
