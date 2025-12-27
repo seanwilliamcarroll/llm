@@ -137,7 +137,7 @@ impl BytePairEncoder {
         .expect("Shouldn't fail")
     }
 
-    fn frequency_count(&self, tokens: &[Token]) -> Vec<(usize, Token)> {
+    fn frequency_count(tokens: &[Token]) -> Vec<(usize, Token)> {
         let mut counts: HashMap<Token, usize> = HashMap::new();
 
         for token in tokens {
@@ -152,14 +152,42 @@ impl BytePairEncoder {
     }
 
     fn print_vocab(&self, tokens: &[Token]) {
-        let frequency_counts = self.frequency_count(tokens);
+        let frequency_counts = Self::frequency_count(tokens);
 
+        let mut most_impact_frequency = frequency_counts.clone();
+        most_impact_frequency.sort_by_key(|(count, token)| {
+            let bytes = self.decoding_rules.get(token).unwrap();
+            std::cmp::Reverse(bytes.len() * count)
+        });
+
+        println!("Top 5 Tokens");
         for (count, token) in frequency_counts.into_iter().take(5) {
-            println!("Top 5 Tokens");
-            print!("{token} ({count} times)");
+            println!("--------------------------------------------------");
             let bytes = self.decoding_rules.get(&token).unwrap();
+            print!(
+                "{token} ({count} times with length {} = {} bytes)",
+                bytes.len(),
+                count * bytes.len()
+            );
             if let Ok(string_token) = String::from_utf8(bytes.clone()) {
-                println!(" \"{string_token}\"");
+                println!("\n\"{string_token}\"");
+            } else {
+                println!();
+            }
+        }
+        println!();
+
+        println!("Top 5 Tokens (Impact)");
+        for (count, token) in most_impact_frequency.into_iter().take(5) {
+            println!("--------------------------------------------------");
+            let bytes = self.decoding_rules.get(&token).unwrap();
+            print!(
+                "{token} ({count} times with length {} = {} bytes)",
+                bytes.len(),
+                count * bytes.len()
+            );
+            if let Ok(string_token) = String::from_utf8(bytes.clone()) {
+                println!("\n\"{string_token}\"");
             } else {
                 println!();
             }
