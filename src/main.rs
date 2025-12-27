@@ -32,7 +32,7 @@ struct BytePairEncoder {
 
 impl BytePairEncoder {
     fn new() -> Self {
-        let rules = (0..256).map(|value| (vec![value as u8], Token(value)));
+        let rules = (0..=255u8).map(|value| (vec![value], Token(value as usize)));
         Self {
             encoding_rules: vec![rules.clone().collect::<HashMap<Vec<u8>, Token>>()],
             decoding_rules: rules
@@ -67,7 +67,7 @@ impl BytePairEncoder {
     fn tokens_to_bytes(tokens: Vec<Token>) -> Option<Vec<u8>> {
         tokens
             .into_iter()
-            .map(|token| token.as_byte())
+            .map(Token::as_byte)
             .collect::<Option<Vec<u8>>>()
     }
 
@@ -77,7 +77,6 @@ impl BytePairEncoder {
 
         let bytes_key = self.get_bytes(new_token);
 
-        // If we're adding a new rule,
         assert!(bytes_key.len() > 1);
 
         if self.encoding_rules.len() < bytes_key.len() {
@@ -120,18 +119,17 @@ impl BytePairEncoder {
             let encoding_slice = &raw_bytes[index..end_bound];
             let (next_token, encoding_size) = self.find_next_token(encoding_slice);
             output.push(next_token);
-            index = index + encoding_size;
+            index += encoding_size;
         }
 
         output
     }
 
-    fn decode(&self, tokens: &Vec<Token>) -> String {
+    fn decode(&self, tokens: &[Token]) -> String {
         String::from_utf8(
             tokens
                 .iter()
-                .map(|token| self.get_bytes(*token))
-                .flatten()
+                .flat_map(|token| self.get_bytes(*token))
                 .collect::<Vec<u8>>(),
         )
         .expect("Shouldn't fail")
@@ -157,7 +155,7 @@ impl Tokenizer {
         self.encoder.encode(input)
     }
 
-    fn decode(&self, tokens: &Vec<Token>) -> String {
+    fn decode(&self, tokens: &[Token]) -> String {
         self.encoder.decode(tokens)
     }
 
@@ -260,7 +258,7 @@ fn main() -> std::io::Result<()> {
 
         let training_time = start_time.elapsed();
 
-        println!("Training time: {:.2?}", training_time);
+        println!("Training time: {training_time:.2?}");
 
         let start_time = Instant::now();
 
@@ -272,9 +270,8 @@ fn main() -> std::io::Result<()> {
             "Encoded tokens {} ({:.2}x)",
             encoded.len(),
             (text.len() as f64) / (encoded.len() as f64),
-            // encoded.iter().take(10).collect::<Vec<_>>()
         );
-        println!("Encoding time: {:.2?}", encoding_time);
+        println!("Encoding time: {encoding_time:.2?}");
 
         let start_time = Instant::now();
 
@@ -282,14 +279,10 @@ fn main() -> std::io::Result<()> {
 
         let decoding_time = start_time.elapsed();
 
-        println!(
-            "Decoded text {} bytes",
-            decoded.len(),
-            // decoded.chars().take(400).collect::<String>()
-        );
+        println!("Decoded text {} bytes", decoded.len());
         assert_eq!(text.len(), decoded.len());
 
-        println!("Decoding time: {:.2?}", decoding_time);
+        println!("Decoding time: {decoding_time:.2?}");
     }
     Ok(())
 }
