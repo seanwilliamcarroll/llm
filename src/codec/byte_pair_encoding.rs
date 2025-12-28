@@ -208,10 +208,7 @@ impl BytePairEncodingCodecTrainer {
     }
 
     pub fn train(&mut self, input: &str, additional_merges: usize) {
-        let mut tokens = input
-            .bytes()
-            .map(|byte| Token::from_u8(byte))
-            .collect::<Vec<Token>>();
+        let mut tokens = input.bytes().map(Token::from_u8).collect::<Vec<Token>>();
         let mut new_tokens: Vec<Token> = Vec::with_capacity(tokens.len());
         let mut current_tokens = Vec::with_capacity(2);
 

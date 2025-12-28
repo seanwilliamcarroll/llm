@@ -16,7 +16,7 @@ pub fn demo_train_codec(additional_vocab: usize, text: &str) {
 
     let start_time = Instant::now();
 
-    codec_trainer.train(&text, additional_vocab);
+    codec_trainer.train(text, additional_vocab);
 
     let training_time = start_time.elapsed();
 
@@ -26,7 +26,7 @@ pub fn demo_train_codec(additional_vocab: usize, text: &str) {
 
     let start_time = Instant::now();
 
-    let encoded = codec.encode(&text);
+    let encoded = codec.encode(text);
 
     let encoding_time = start_time.elapsed();
 
