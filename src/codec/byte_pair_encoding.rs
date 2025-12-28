@@ -1,6 +1,8 @@
-use super::token::Token;
+use super::token::{Token, TokenInternal};
 use super::types::Codec;
 use std::collections::HashMap;
+
+pub const INITIAL_VOCABULARY_SIZE: TokenInternal = 256;
 
 #[derive(Clone)]
 pub struct BytePairEncodingCodec {
@@ -9,8 +11,13 @@ pub struct BytePairEncodingCodec {
 }
 
 impl BytePairEncodingCodec {
+    #[allow(clippy::cast_possible_truncation)]
+    const INITIAL_VOCABULARY_SIZE_MAX: u8 = (INITIAL_VOCABULARY_SIZE - 1) as u8;
+
+    #[must_use]
     pub fn new() -> Self {
-        let rules = (0..=255u8).map(|value| (vec![value], Token::from_u8(value)));
+        let rules =
+            (0..=Self::INITIAL_VOCABULARY_SIZE_MAX).map(|value| (vec![value], Token::from(value)));
 
         BytePairEncodingCodec {
             encoding_rules: vec![rules.clone().collect::<HashMap<Vec<u8>, Token>>()],
@@ -135,22 +142,24 @@ impl Codec for BytePairEncodingCodec {
 }
 
 pub struct BytePairEncodingCodecTrainer {
-    current_token_id: usize,
+    current_token_id: TokenInternal,
     mapping: HashMap<(Token, Token), Token>,
     reverse_mapping: HashMap<Token, (Token, Token)>,
     codec: BytePairEncodingCodec,
 }
 
 impl BytePairEncodingCodecTrainer {
+    #[must_use]
     pub fn new() -> Self {
         Self {
-            current_token_id: 256usize,
+            current_token_id: INITIAL_VOCABULARY_SIZE,
             mapping: HashMap::new(),
             reverse_mapping: HashMap::new(),
             codec: BytePairEncodingCodec::new(),
         }
     }
 
+    #[must_use]
     pub fn get_codec(&self) -> BytePairEncodingCodec {
         self.codec.clone()
     }
@@ -208,7 +217,7 @@ impl BytePairEncodingCodecTrainer {
     }
 
     pub fn train(&mut self, input: &str, additional_merges: usize) {
-        let mut tokens = input.bytes().map(Token::from_u8).collect::<Vec<Token>>();
+        let mut tokens = input.bytes().map(Token::from).collect::<Vec<Token>>();
         let mut new_tokens: Vec<Token> = Vec::with_capacity(tokens.len());
         let mut current_tokens = Vec::with_capacity(2);
 
@@ -242,7 +251,7 @@ impl BytePairEncodingCodecTrainer {
                         let token_b = *token_b;
 
                         if (token_a, token_b) == top_pair {
-                            new_tokens.push(Token::from_usize(self.current_token_id));
+                            new_tokens.push(Token::from(self.current_token_id));
                             current_tokens.clear();
                         } else {
                             new_tokens.push(token_a);
@@ -255,7 +264,7 @@ impl BytePairEncodingCodecTrainer {
             }
             new_tokens.extend(current_tokens.drain(0..));
             current_tokens.clear();
-            self.add_encoding_rule(top_pair, Token::from_usize(self.current_token_id));
+            self.add_encoding_rule(top_pair, Token::from(self.current_token_id));
             self.current_token_id += 1;
             std::mem::swap(&mut tokens, &mut new_tokens);
             new_tokens.clear();
