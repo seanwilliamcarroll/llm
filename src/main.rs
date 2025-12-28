@@ -23,8 +23,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-// impl Ord for Token {}
-
 struct BytePairEncoder {
     encoding_rules: Vec<HashMap<Vec<u8>, Token>>,
     decoding_rules: HashMap<Token, Vec<u8>>,
@@ -71,6 +69,12 @@ impl BytePairEncoder {
             .into_iter()
             .map(Token::as_byte)
             .collect::<Option<Vec<u8>>>()
+    }
+
+    fn resize_with_additional_vocab(&mut self, additional_vocab: usize) {
+        self.mapping.reserve(additional_vocab);
+        self.reverse_mapping.reserve(additional_vocab);
+        self.decoding_rules.reserve(additional_vocab);
     }
 
     fn add_encoding_rule(&mut self, pair: (Token, Token), new_token: Token) {
@@ -225,10 +229,15 @@ impl Tokenizer {
             .bytes()
             .map(|byte| Token(byte as usize))
             .collect::<Vec<Token>>();
+        let mut new_tokens: Vec<Token> = Vec::with_capacity(tokens.len());
+        let mut current_tokens = Vec::with_capacity(2);
+
+        self.encoder.resize_with_additional_vocab(additional_merges);
 
         for added_vocab in 0..additional_merges {
             if added_vocab == 2000 {
                 tokens = tokens.into_iter().take(200_000).collect::<Vec<Token>>();
+                new_tokens = Vec::with_capacity(tokens.len());
             }
 
             let pairs = Self::count_pairs(&tokens);
@@ -241,38 +250,34 @@ impl Tokenizer {
 
             let (top_pair, _) = top_pairs[0];
 
-            let new_tokens = {
-                let mut new_tokens = Vec::with_capacity(tokens.len());
+            tokens.reverse();
 
-                tokens.reverse();
+            while let Some(next_token) = tokens.pop() {
+                current_tokens.push(next_token);
+                match &current_tokens[..] {
+                    [token_a, token_b] => {
+                        let token_a = *token_a;
+                        let token_b = *token_b;
 
-                let mut current_tokens = Vec::with_capacity(2);
-                while let Some(next_token) = tokens.pop() {
-                    current_tokens.push(next_token);
-                    match &current_tokens[..] {
-                        [token_a, token_b] => {
-                            let token_a = *token_a;
-                            let token_b = *token_b;
-
-                            if (token_a, token_b) == top_pair {
-                                new_tokens.push(Token(self.current_token_id));
-                                current_tokens.clear();
-                            } else {
-                                new_tokens.push(token_a);
-                                current_tokens.remove(0);
-                            }
+                        if (token_a, token_b) == top_pair {
+                            new_tokens.push(Token(self.current_token_id));
+                            current_tokens.clear();
+                        } else {
+                            new_tokens.push(token_a);
+                            current_tokens.remove(0);
                         }
-                        [_] => {}
-                        _ => panic!("Can't happen"),
                     }
+                    [_] => {}
+                    _ => panic!("Can't happen"),
                 }
-                new_tokens.extend(current_tokens);
-                new_tokens
-            };
+            }
+            new_tokens.extend(current_tokens.drain(0..));
+            current_tokens.clear();
             self.encoder
                 .add_encoding_rule(top_pair, Token(self.current_token_id));
             self.current_token_id += 1;
-            tokens = new_tokens;
+            std::mem::swap(&mut tokens, &mut new_tokens);
+            new_tokens.clear();
         }
     }
 }
