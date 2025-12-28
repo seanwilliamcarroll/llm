@@ -1,21 +1,25 @@
 use clap::{ArgGroup, Parser};
-use llm::demo_train_codec;
+use llm::{codec::Codec, demo_train_codec};
+use std::path::Path;
 
 #[derive(Parser)]
 #[command(group(
     ArgGroup::new("mode")
-        .required(true)
-        .args(["training_data", "load_file"])
+        .args(["save_file_base", "load_file"])
 ))]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Input corpus file (*.txt)
-    #[arg(short, long)]
-    training_data: Option<String>,
+    training_data: String,
 
-    /// Optionally save trained codec to file
-    #[arg(short, long, default_value = None, conflicts_with="load_file")]
-    save_file: Option<String>,
+    #[allow(clippy::doc_markdown)]
+    /// Optionally save trained codecs to file, in format
+    ///
+    ///     <SAVE_FILE_BASE>_<TRAINING_DATA>_<VOCAB_SIZE>.cdx
+    ///
+    /// with <TRAINING_DATA> equal to the base filename of training-data
+    #[arg(short, long, default_value = None, verbatim_doc_comment)]
+    save_file_base: Option<String>,
 
     /// Load codec from existing file
     #[arg(short, long)]
@@ -25,20 +29,40 @@ struct Cli {
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
 
-    if let Some(filepath) = args.training_data {
-        println!("Read from file: {filepath}");
+    let filepath = args.training_data;
+    println!("Read from file: {filepath}");
 
-        let text = std::fs::read_to_string(filepath)?;
+    let text = std::fs::read_to_string(filepath.clone())?;
 
-        for additional_vocab in [0, 256, 768, 1280, 20278] {
-            demo_train_codec(additional_vocab, &text);
-        }
+    let mut codec;
 
-        if let Some(_save_file) = args.save_file {
-            todo!();
-        }
-    } else if let Some(_load_file) = args.load_file {
+    if let Some(_load_file) = args.load_file {
         todo!();
+    } else {
+        for additional_vocab in [0, 256, 768, 1280, 20278] {
+            codec = demo_train_codec(additional_vocab, &text);
+            if let Some(save_file) = args.save_file_base.as_ref() {
+                // Save the last codec
+                let new_filename = format!(
+                    "{save_file}_{}_{}.cdx",
+                    Path::new(&filepath)
+                        .file_stem()
+                        .expect("Already read this file")
+                        .to_str()
+                        .unwrap_or("training_data"),
+                    codec.vocab_size()
+                );
+                match codec.save_to_file(&new_filename) {
+                    Ok(()) => {
+                        println!("Saved to file: {new_filename}");
+                    }
+                    Err(error) => {
+                        eprintln!("Failed to save to file: {new_filename}\n{error}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

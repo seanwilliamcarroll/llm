@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 pub type TokenInternal = u32;
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Token(TokenInternal);
 
 impl Token {

@@ -1,10 +1,13 @@
 use super::token::{Token, TokenInternal};
 use super::types::Codec;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
 
 pub const INITIAL_VOCABULARY_SIZE: TokenInternal = 256;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BytePairEncodingCodec {
     encoding_rules: Vec<HashMap<Vec<u8>, Token>>,
     decoding_rules: HashMap<Token, Vec<u8>>,
@@ -70,32 +73,28 @@ impl BytePairEncodingCodec {
         output.reverse();
         output
     }
+    pub fn save_to_file(&self, filepath: &str) -> anyhow::Result<()> {
+        let bytes = postcard::to_stdvec(self)?;
 
-    pub fn print_vocab(&self, tokens: &[Token]) {
-        let frequency_counts = Self::frequency_count(tokens);
+        let mut output_file = File::create(filepath)?;
 
-        let mut most_impact_frequency = frequency_counts.clone();
-        most_impact_frequency.sort_by_key(|(count, token)| {
-            let bytes = self.decoding_rules.get(token).unwrap();
-            std::cmp::Reverse(bytes.len() * count)
-        });
+        output_file.write_all(&bytes)?;
 
-        println!("Top 10 Tokens (Impact)");
-        for (count, token) in most_impact_frequency.into_iter().take(10) {
-            println!("--------------------------------------------------");
-            let bytes = self.decoding_rules.get(&token).unwrap();
-            print!(
-                "{token} ({count} times with length {} = {} bytes)",
-                bytes.len(),
-                count * bytes.len()
-            );
-            if let Ok(string_token) = String::from_utf8(bytes.clone()) {
-                println!("\n\"{string_token}\"");
-            } else {
-                println!();
-            }
-        }
-        println!();
+        Ok(())
+    }
+
+    pub fn load_from_file(filepath: &str) -> anyhow::Result<Self> {
+        let input_file = File::open(filepath)?;
+
+        let mut reader = BufReader::new(input_file);
+
+        let mut bytes = vec![];
+
+        reader.read_to_end(&mut bytes)?;
+
+        let codec: Self = postcard::from_bytes(&bytes)?;
+
+        Ok(codec)
     }
 }
 
@@ -138,6 +137,37 @@ impl Codec for BytePairEncodingCodec {
                 .collect::<Vec<u8>>(),
         )
         .expect("Shouldn't fail")
+    }
+
+    fn vocab_size(&self) -> usize {
+        self.decoding_rules.len()
+    }
+
+    fn print_vocab(&self, tokens: &[Token]) {
+        let frequency_counts = Self::frequency_count(tokens);
+
+        let mut most_impact_frequency = frequency_counts.clone();
+        most_impact_frequency.sort_by_key(|(count, token)| {
+            let bytes = self.decoding_rules.get(token).unwrap();
+            std::cmp::Reverse(bytes.len() * count)
+        });
+
+        println!("Top 10 Tokens (Impact)");
+        for (count, token) in most_impact_frequency.into_iter().take(10) {
+            println!("--------------------------------------------------");
+            let bytes = self.decoding_rules.get(&token).unwrap();
+            print!(
+                "{token} ({count} times with length {} = {} bytes)",
+                bytes.len(),
+                count * bytes.len()
+            );
+            if let Ok(string_token) = String::from_utf8(bytes.clone()) {
+                println!("\n\"{string_token}\"");
+            } else {
+                println!();
+            }
+        }
+        println!();
     }
 }
 

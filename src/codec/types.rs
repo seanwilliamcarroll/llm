@@ -4,4 +4,8 @@ pub trait Codec {
     fn encode(&self, input: &str) -> Vec<Token>;
 
     fn decode(&self, input: &[Token]) -> String;
+
+    fn vocab_size(&self) -> usize;
+
+    fn print_vocab(&self, tokens: &[Token]) -> ();
 }
