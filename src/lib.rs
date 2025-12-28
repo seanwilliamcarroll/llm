@@ -7,7 +7,7 @@ pub fn demo_train_codec(additional_vocab: usize, text: &str) {
     println!();
     println!(
         "========================= Vocab size: {} =========================",
-        additional_vocab + 256
+        (additional_vocab as u32) + codec::INITIAL_VOCABULARY_SIZE
     );
 
     println!("Original text: {} bytes", text.len());
