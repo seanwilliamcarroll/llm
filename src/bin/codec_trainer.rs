@@ -46,7 +46,6 @@ fn main() -> std::io::Result<()> {
         for additional_vocab in [0, 256, 768, 1280, 20278] {
             let codec = demo_train_codec(additional_vocab, &text);
             if let Some(save_file) = args.save_file_base.as_ref() {
-                // Save the last codec
                 let new_filename = format!(
                     "{save_file}_{}_{}.cdx",
                     Path::new(&filepath)
