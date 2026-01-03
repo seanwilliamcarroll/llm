@@ -1,4 +1,5 @@
 pub mod codec;
+pub mod tensor;
 
 use codec::{BytePairEncodingCodec, BytePairEncodingCodecTrainer, Codec};
 use std::time::Instant;
