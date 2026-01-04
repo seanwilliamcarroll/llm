@@ -8,11 +8,17 @@ pub struct Tensor {
 }
 
 impl Tensor {
+    /// # Panics
+    /// Will panic on a tensor with mismatch in shape and len of data
     #[must_use]
     pub fn new(data: TensorData, shape: Vec<usize>) -> Self {
         let total_data = shape.iter().fold(1, |acc, next| acc * (*next));
 
-        assert_eq!(total_data, data.len());
+        assert_eq!(
+            total_data,
+            data.len(),
+            "Shape does not match length of data!"
+        );
 
         let mut strides = vec![1_usize; shape.len()];
 
@@ -37,6 +43,10 @@ impl Tensor {
         )
     }
 
+    /// # Panics
+    /// Will panic when `lower_bound` >= `upper_bound`
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn arange(lower_bound: usize, upper_bound: usize) -> Self {
         assert!(upper_bound > lower_bound);
         Self::new(
@@ -60,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Shape does not match length of data!")]
     fn test_bad_new() {
         let _ = Tensor::new(vec![1.0, 2.0, 3.0, 4.0], vec![2, 3]);
     }

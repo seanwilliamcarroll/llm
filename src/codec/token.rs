@@ -26,11 +26,9 @@ impl From<u8> for Token {
 
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.0 < TokenInternal::from(256u16) {
-            let character = char::from_u32(self.0 as TokenInternal).unwrap();
-            if character.is_ascii() {
-                return write!(f, "T<{}({:?})>", self.0, character);
-            }
+        if let Some(value) = self.as_byte() {
+            let character = value as char;
+            return write!(f, "T<{}({:?})>", self.0, character);
         }
         write!(f, "T<{}>", self.0)
     }

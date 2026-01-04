@@ -1,9 +1,16 @@
+#![warn(clippy::all)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::unwrap_used)]
+
 pub mod codec;
 pub mod tensor;
 
 use codec::{BytePairEncodingCodec, BytePairEncodingCodecTrainer, Codec};
 use std::time::Instant;
 
+/// # Panics
+/// Will panic if the encoded then decoded text is not the same len as input `text`
+#[allow(clippy::cast_precision_loss)]
 pub fn demo_codec(codec: &impl Codec, text: &str) {
     let start_time = Instant::now();
 
@@ -33,6 +40,7 @@ pub fn demo_codec(codec: &impl Codec, text: &str) {
 }
 
 #[must_use]
+#[allow(clippy::cast_possible_truncation)]
 pub fn demo_train_codec(additional_vocab: usize, text: &str) -> BytePairEncodingCodec {
     println!();
     println!(
@@ -58,6 +66,10 @@ pub fn demo_train_codec(additional_vocab: usize, text: &str) -> BytePairEncoding
     codec
 }
 
+/// Demo function to load a specific codec and demo it
+///
+/// # Errors
+/// IO Errors or errors serializing, see `load_from_file`
 pub fn demo_load_codec(filename: &str, text: &str) -> anyhow::Result<BytePairEncodingCodec> {
     let codec: BytePairEncodingCodec = BytePairEncodingCodec::load_from_file(filename)?;
 

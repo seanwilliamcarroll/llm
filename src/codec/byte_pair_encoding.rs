@@ -22,7 +22,7 @@ impl BytePairEncodingCodec {
         let rules =
             (0..=Self::INITIAL_VOCABULARY_SIZE_MAX).map(|value| (vec![value], Token::from(value)));
 
-        BytePairEncodingCodec {
+        Self {
             encoding_rules: vec![rules.clone().collect::<HashMap<Vec<u8>, Token>>()],
             decoding_rules: rules
                 .map(|(k, v)| (v, k))
@@ -73,6 +73,11 @@ impl BytePairEncodingCodec {
         output.reverse();
         output
     }
+
+    /// Save codec to file
+    ///
+    /// # Errors
+    /// IO Errors or errors serializing
     pub fn save_to_file(&self, filepath: &str) -> anyhow::Result<()> {
         let bytes = postcard::to_stdvec(self)?;
 
@@ -83,6 +88,10 @@ impl BytePairEncodingCodec {
         Ok(())
     }
 
+    /// Load codec from file
+    ///
+    /// # Errors
+    /// IO Errors, errors serializing, missing file
     pub fn load_from_file(filepath: &str) -> anyhow::Result<Self> {
         let input_file = File::open(filepath)?;
 
@@ -148,14 +157,20 @@ impl Codec for BytePairEncodingCodec {
 
         let mut most_impact_frequency = frequency_counts.clone();
         most_impact_frequency.sort_by_key(|(count, token)| {
-            let bytes = self.decoding_rules.get(token).unwrap();
+            let bytes = self
+                .decoding_rules
+                .get(token)
+                .expect("We already looked it up");
             std::cmp::Reverse(bytes.len() * count)
         });
 
         println!("Top 10 Tokens (Impact)");
         for (count, token) in most_impact_frequency.into_iter().take(10) {
             println!("--------------------------------------------------");
-            let bytes = self.decoding_rules.get(&token).unwrap();
+            let bytes = self
+                .decoding_rules
+                .get(&token)
+                .expect("We already looked it up");
             print!(
                 "{token} ({count} times with length {} = {} bytes)",
                 bytes.len(),
@@ -176,6 +191,12 @@ pub struct BytePairEncodingCodecTrainer {
     mapping: HashMap<(Token, Token), Token>,
     reverse_mapping: HashMap<Token, (Token, Token)>,
     codec: BytePairEncodingCodec,
+}
+
+enum Window {
+    Empty,
+    One(Token),
+    Two(Token, Token),
 }
 
 impl BytePairEncodingCodecTrainer {
@@ -249,7 +270,7 @@ impl BytePairEncodingCodecTrainer {
     pub fn train(&mut self, input: &str, additional_merges: usize) {
         let mut tokens = input.bytes().map(Token::from).collect::<Vec<Token>>();
         let mut new_tokens: Vec<Token> = Vec::with_capacity(tokens.len());
-        let mut current_tokens = Vec::with_capacity(2);
+        let mut current_window = Window::Empty;
 
         self.resize_with_additional_vocab(additional_merges);
 
@@ -274,26 +295,30 @@ impl BytePairEncodingCodecTrainer {
             tokens.reverse();
 
             while let Some(next_token) = tokens.pop() {
-                current_tokens.push(next_token);
-                match &current_tokens[..] {
-                    [token_a, token_b] => {
-                        let token_a = *token_a;
-                        let token_b = *token_b;
-
-                        if (token_a, token_b) == top_pair {
+                current_window = match current_window {
+                    Window::Empty => Window::One(next_token),
+                    Window::One(first_token) => Window::Two(first_token, next_token),
+                    Window::Two(first, second) => {
+                        if (first, second) == top_pair {
                             new_tokens.push(Token::from(self.current_token_id));
-                            current_tokens.clear();
+                            Window::One(next_token)
                         } else {
-                            new_tokens.push(token_a);
-                            current_tokens.remove(0);
+                            new_tokens.push(first);
+                            Window::Two(second, next_token)
                         }
                     }
-                    [_] => {}
-                    _ => panic!("Can't happen"),
+                };
+            }
+            match current_window {
+                Window::Empty => {}
+                Window::One(token) => new_tokens.push(token),
+                Window::Two(first, second) => {
+                    new_tokens.push(first);
+                    new_tokens.push(second);
                 }
             }
-            new_tokens.extend(current_tokens.drain(0..));
-            current_tokens.clear();
+            current_window = Window::Empty;
+
             self.add_encoding_rule(top_pair, Token::from(self.current_token_id));
             self.current_token_id += 1;
             std::mem::swap(&mut tokens, &mut new_tokens);
